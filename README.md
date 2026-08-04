@@ -56,26 +56,13 @@ If logs show a repeating `TelegramNetworkError` / connection timeout and the con
 curl -m 8 -o /dev/null -w "HTTP %{http_code}\n" https://api.telegram.org
 ```
 
-If this also times out, the bot needs a proxy to reach Telegram. Set `PROXY_URL` in `.env` to an HTTP(S) or SOCKS5 proxy you control (e.g. a lightweight proxy on a VPS outside the blocked region):
+If this also times out, the bot needs a proxy to reach Telegram. Set `PROXY_URL` in `.env` to an HTTP(S) or SOCKS4/5 proxy you control (e.g. a lightweight proxy on a VPS outside the blocked region):
 
 ```
 PROXY_URL=socks5://user:pass@your-proxy-host:1080
 ```
 
-Then rebuild: `docker compose up --build -d`.
-
-#### Using a Hysteria2 proxy
-
-Hysteria2 isn't a SOCKS/HTTP proxy protocol, so it can't be plugged into `PROXY_URL` directly. Instead, `docker-compose.yml` runs the official Hysteria2 client as a sidecar (`hysteria` service) which exposes a local SOCKS5 proxy that the bot then connects to:
-
-1. `cp hysteria/config.example.yaml hysteria/config.yaml`
-2. Fill in `hysteria/config.yaml` from your `hysteria2://` share link:
-   - `hysteria2://AUTH@SERVER:PORT?insecure=1#name` →
-     `server: SERVER:PORT`, `auth: AUTH`, `tls.insecure: true` (only if `insecure=1` was in the link).
-3. Keep `.env`'s `PROXY_URL=socks5://127.0.0.1:1080` — both containers use `network_mode: host`, so the bot reaches the Hysteria2 client's local SOCKS5 port via `localhost`.
-4. `docker compose up --build -d` (pulls the `tobyxdd/hysteria` client image on first run)
-
-`hysteria/config.yaml` is gitignored since it holds your real proxy credentials.
+Then rebuild: `docker compose up --build -d`. Leave `PROXY_URL` empty (the default) when running on a host that can already reach Telegram directly, e.g. a VPS outside a country that blocks it.
 
 Logs:
 
