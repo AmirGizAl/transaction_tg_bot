@@ -89,7 +89,8 @@ docker compose down
 ### Executor
 - **Fiat transaction** — record a bank transfer or cash payout, converted from USDT.
 - **Add wallet** — register a new wallet with an optional initial deposit.
-- **Change balance** — top up a wallet's balance.
+- **Delete wallet** — soft-delete a wallet: it stops being offered for any action, but past transactions against it still show up in reports.
+- **Change balance** — adjust a wallet's balance up or down (enter a negative number, e.g. `-500`, to subtract); can't push the balance below zero.
 - **Tr. between wallets** — move funds from one wallet to another.
 - **Download report** — same as above.
 - Reacts to **"Attach a report"** on a request card in the group chat by sending a screenshot in the private chat with the bot, which marks the request as Done and settles the wallet balance.
