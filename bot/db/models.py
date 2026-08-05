@@ -32,6 +32,7 @@ class Wallet(Base):
     address: Mapped[str] = mapped_column(String(128))
     balance: Mapped[float] = mapped_column(Numeric(18, 2), default=0)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     onchain_requests: Mapped[list["OnchainRequest"]] = relationship(back_populates="wallet")
     fiat_transactions: Mapped[list["FiatTransaction"]] = relationship(back_populates="wallet")

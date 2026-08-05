@@ -20,7 +20,10 @@ class InsufficientFundsError(Exception):
 
 
 async def list_wallets(session: AsyncSession) -> list[Wallet]:
-    result = await session.execute(select(Wallet).order_by(Wallet.id))
+    """Active (non-deleted) wallets — the only ones ever offered for selection."""
+    result = await session.execute(
+        select(Wallet).where(Wallet.deleted_at.is_(None)).order_by(Wallet.id)
+    )
     return list(result.scalars().all())
 
 
@@ -55,9 +58,24 @@ async def add_wallet(session: AsyncSession, address: str, deposit: Decimal) -> W
     return wallet
 
 
-async def change_balance(session: AsyncSession, wallet_id: int, refill_sum: Decimal) -> Wallet:
+async def change_balance(session: AsyncSession, wallet_id: int, change_sum: Decimal) -> Wallet:
     wallet = await get_wallet(session, wallet_id)
-    wallet.balance = Decimal(str(wallet.balance)) + refill_sum
+    new_balance = Decimal(str(wallet.balance)) + change_sum
+    if new_balance < 0:
+        raise InsufficientFundsError()
+    wallet.balance = new_balance
+    await session.commit()
+    await session.refresh(wallet)
+    return wallet
+
+
+async def delete_wallet(session: AsyncSession, wallet_id: int) -> Wallet:
+    """Soft delete: the wallet stays in the DB (so past transactions and reports still
+    resolve its address) but is no longer offered in any wallet picker."""
+    wallet = await get_wallet(session, wallet_id)
+    if wallet.deleted_at is not None:
+        raise ValueError("Wallet already deleted")
+    wallet.deleted_at = utcnow()
     await session.commit()
     await session.refresh(wallet)
     return wallet

@@ -27,6 +27,18 @@ def parse_amount(text: str, allow_zero: bool = False) -> Decimal:
     return value
 
 
+def parse_signed_amount(text: str) -> Decimal:
+    """Like parse_amount, but allows a leading '-' (e.g. for balance adjustments that
+    can go either way). Zero is still rejected — it wouldn't be a meaningful change."""
+    try:
+        value = Decimal(text.strip().replace(",", ".")).quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
+    except InvalidOperation as exc:
+        raise ValueError("Invalid number") from exc
+    if value == 0:
+        raise ValueError("Amount must not be zero")
+    return value
+
+
 def format_amount(value) -> str:
     d = Decimal(str(value)).quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
     sign = "-" if d < 0 else ""
