@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from aiogram import Bot, F, Router
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
@@ -9,7 +10,7 @@ from bot.config import Config
 from bot.db.engine import get_session
 from bot.db.models import Currency
 from bot.keyboards.inline import confirm_keyboard, currency_picker, done_keyboard, wallet_picker
-from bot.keyboards.menus import FIAT_TRANSACTION, executor_menu
+from bot.keyboards.menus import CMD_FIAT_TRANSACTION, FIAT_TRANSACTION, executor_menu
 from bot.services import wallets as wallet_service
 from bot.services.notify import post_photos_to_group
 from bot.utils import esc, fmt_dt, format_amount, parse_amount
@@ -40,6 +41,7 @@ def _fiat_summary_text(wallet_address: str, sum_usdt, amount_received, currency:
 
 
 @router.message(F.text == FIAT_TRANSACTION)
+@router.message(Command(CMD_FIAT_TRANSACTION))
 async def start_fiat_transaction(message: Message, role: str | None, state: FSMContext) -> None:
     if role != "executor":
         return
@@ -89,13 +91,13 @@ async def enter_received(message: Message, state: FSMContext) -> None:
 @router.callback_query(FiatTransactionStates.choosing_currency, F.data.startswith("currency:"))
 async def choose_currency(callback: CallbackQuery, state: FSMContext) -> None:
     currency = callback.data.split(":", 1)[1]
-    await state.update_data(currency=currency, report_file_ids=[])
-    await state.set_state(FiatTransactionStates.attaching_report)
     await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.message.answer(
+    prompt = await callback.message.answer(
         "Attach screenshot(s) of the bank transaction report, or press Done to skip.",
         reply_markup=done_keyboard(),
     )
+    await state.update_data(currency=currency, report_file_ids=[], prompt_message_id=prompt.message_id)
+    await state.set_state(FiatTransactionStates.attaching_report)
     await callback.answer()
 
 
@@ -112,12 +114,17 @@ async def _show_fiat_summary(message: Message, state: FSMContext) -> None:
 
 
 @router.message(FiatTransactionStates.attaching_report, F.photo)
-async def receive_fiat_photo(message: Message, state: FSMContext) -> None:
+async def receive_fiat_photo(message: Message, state: FSMContext, bot: Bot) -> None:
     data = await state.get_data()
     photos = list(data.get("report_file_ids", []))
     photos.append(message.photo[-1].file_id)
     await state.update_data(report_file_ids=photos)
-    await message.answer(f"Photo added ({len(photos)}). Send another, or press Done.", reply_markup=done_keyboard())
+    await bot.edit_message_text(
+        chat_id=message.chat.id,
+        message_id=data["prompt_message_id"],
+        text=f"Photo added ({len(photos)}). Send another, or press Done.",
+        reply_markup=done_keyboard(),
+    )
 
 
 @router.callback_query(FiatTransactionStates.attaching_report, F.data == "done_photos")

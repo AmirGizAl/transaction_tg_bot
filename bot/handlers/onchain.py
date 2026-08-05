@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from aiogram import Bot, F, Router
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.base import StorageKey
@@ -11,7 +12,7 @@ from bot.db.engine import get_session
 from bot.db.models import RequestStatus
 from bot.fsm_storage import storage
 from bot.keyboards.inline import confirm_keyboard, done_keyboard, request_card_keyboard, wallet_picker
-from bot.keyboards.menus import NEW_TRANSACTION, owner_menu
+from bot.keyboards.menus import CMD_NEW_TRANSACTION, NEW_TRANSACTION, owner_menu
 from bot.services import wallets as wallet_service
 from bot.services.notify import post_photos_to_group, post_to_group
 from bot.utils import esc, fmt_dt, format_amount, parse_amount
@@ -44,6 +45,7 @@ def _onchain_card_text(status: str, created_at_text: str, wallet_address: str, a
 
 
 @router.message(F.text == NEW_TRANSACTION)
+@router.message(Command(CMD_NEW_TRANSACTION))
 async def start_new_transaction(message: Message, role: str | None, state: FSMContext) -> None:
     if role != "owner":
         return
@@ -172,26 +174,32 @@ async def start_attach_report(callback: CallbackQuery, bot: Bot, config: Config)
             await callback.answer("This request is already resolved.", show_alert=True)
             return
 
-    executor_key = StorageKey(bot_id=bot.id, chat_id=config.executor_id, user_id=config.executor_id)
-    executor_state = FSMContext(storage=storage, key=executor_key)
-    await executor_state.set_state(AttachReportStates.collecting_photos)
-    await executor_state.update_data(request_id=request_id, photos=[])
-    await bot.send_message(
+    prompt = await bot.send_message(
         config.executor_id,
         f"Send one or more photos of the transaction report for request #{request_id}, "
         "then press Done.",
         reply_markup=done_keyboard(),
     )
+
+    executor_key = StorageKey(bot_id=bot.id, chat_id=config.executor_id, user_id=config.executor_id)
+    executor_state = FSMContext(storage=storage, key=executor_key)
+    await executor_state.set_state(AttachReportStates.collecting_photos)
+    await executor_state.update_data(request_id=request_id, photos=[], prompt_message_id=prompt.message_id)
     await callback.answer("Check your private chat with the bot.")
 
 
 @router.message(AttachReportStates.collecting_photos, F.photo)
-async def receive_report_photo(message: Message, state: FSMContext) -> None:
+async def receive_report_photo(message: Message, state: FSMContext, bot: Bot) -> None:
     data = await state.get_data()
     photos = list(data.get("photos", []))
     photos.append(message.photo[-1].file_id)
     await state.update_data(photos=photos)
-    await message.answer(f"Photo added ({len(photos)}). Send another, or press Done.", reply_markup=done_keyboard())
+    await bot.edit_message_text(
+        chat_id=message.chat.id,
+        message_id=data["prompt_message_id"],
+        text=f"Photo added ({len(photos)}). Send another, or press Done.",
+        reply_markup=done_keyboard(),
+    )
 
 
 @router.message(AttachReportStates.collecting_photos)

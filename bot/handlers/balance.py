@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from aiogram import Bot, F, Router
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
@@ -8,7 +9,7 @@ from aiogram.types import CallbackQuery, Message
 from bot.config import Config
 from bot.db.engine import get_session
 from bot.keyboards.inline import confirm_keyboard, wallet_picker
-from bot.keyboards.menus import CHANGE_BALANCE, executor_menu
+from bot.keyboards.menus import CHANGE_BALANCE, CMD_CHANGE_BALANCE, executor_menu
 from bot.services import wallets as wallet_service
 from bot.services.notify import post_to_group
 from bot.utils import esc, format_amount, parse_amount
@@ -24,6 +25,7 @@ class ChangeBalanceStates(StatesGroup):
 
 
 @router.message(F.text == CHANGE_BALANCE)
+@router.message(Command(CMD_CHANGE_BALANCE))
 async def start_change_balance(message: Message, role: str | None, state: FSMContext) -> None:
     if role != "executor":
         return

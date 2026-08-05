@@ -6,11 +6,20 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramNetworkError
+from aiogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeDefault
 
-from bot.config import load_config
+from bot.config import Config, load_config
 from bot.db.engine import init_db, init_engine
 from bot.fsm_storage import storage
 from bot.handlers import balance, fiat, onchain, report, start, transfer, wallet
+from bot.keyboards.menus import (
+    CMD_ADD_WALLET,
+    CMD_CHANGE_BALANCE,
+    CMD_DOWNLOAD_REPORT,
+    CMD_FIAT_TRANSACTION,
+    CMD_NEW_TRANSACTION,
+    CMD_TRANSFER_BETWEEN_WALLETS,
+)
 from bot.middlewares.access import RoleMiddleware
 
 logger = logging.getLogger(__name__)
@@ -29,8 +38,43 @@ async def _delete_webhook_with_retry(bot: Bot, attempts: int = 10, delay: float 
             await asyncio.sleep(delay)
 
 
+async def _set_commands(bot: Bot, config: Config) -> None:
+    """Register the "/" commands menu as a fallback entry point that doesn't depend on the
+    reply keyboard being visible. Scoped per-user since Owner and Executor have different
+    actions available."""
+    try:
+        await bot.set_my_commands(
+            [BotCommand(command="start", description="Show the menu")],
+            scope=BotCommandScopeDefault(),
+        )
+        await bot.set_my_commands(
+            [
+                BotCommand(command="start", description="Show the menu"),
+                BotCommand(command=CMD_NEW_TRANSACTION, description="New transaction"),
+                BotCommand(command=CMD_DOWNLOAD_REPORT, description="Download report"),
+            ],
+            scope=BotCommandScopeChat(chat_id=config.owner_id),
+        )
+        await bot.set_my_commands(
+            [
+                BotCommand(command="start", description="Show the menu"),
+                BotCommand(command=CMD_FIAT_TRANSACTION, description="Fiat transaction"),
+                BotCommand(command=CMD_ADD_WALLET, description="Add wallet"),
+                BotCommand(command=CMD_CHANGE_BALANCE, description="Change balance"),
+                BotCommand(command=CMD_TRANSFER_BETWEEN_WALLETS, description="Tr. between wallets"),
+                BotCommand(command=CMD_DOWNLOAD_REPORT, description="Download report"),
+            ],
+            scope=BotCommandScopeChat(chat_id=config.executor_id),
+        )
+    except TelegramNetworkError as exc:
+        logger.warning("Could not register bot commands (will retry on next restart): %s", exc)
+
+
 async def main() -> None:
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s:%(name)s:%(message)s",
+    )
     config = load_config()
 
     init_engine(config.db_path)
@@ -58,6 +102,7 @@ async def main() -> None:
         dp.include_router(report.router)
 
         await _delete_webhook_with_retry(bot)
+        await _set_commands(bot, config)
         await dp.start_polling(bot)
 
 

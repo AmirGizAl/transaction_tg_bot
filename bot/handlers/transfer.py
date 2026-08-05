@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from aiogram import Bot, F, Router
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
@@ -8,7 +9,7 @@ from aiogram.types import CallbackQuery, Message
 from bot.config import Config
 from bot.db.engine import get_session
 from bot.keyboards.inline import confirm_keyboard, wallet_picker
-from bot.keyboards.menus import TRANSFER_BETWEEN_WALLETS, executor_menu
+from bot.keyboards.menus import CMD_TRANSFER_BETWEEN_WALLETS, TRANSFER_BETWEEN_WALLETS, executor_menu
 from bot.services import wallets as wallet_service
 from bot.services.notify import post_to_group
 from bot.utils import esc, format_amount, parse_amount
@@ -25,6 +26,7 @@ class TransferStates(StatesGroup):
 
 
 @router.message(F.text == TRANSFER_BETWEEN_WALLETS)
+@router.message(Command(CMD_TRANSFER_BETWEEN_WALLETS))
 async def start_transfer(message: Message, role: str | None, state: FSMContext) -> None:
     if role != "executor":
         return
